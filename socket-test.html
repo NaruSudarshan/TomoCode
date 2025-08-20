@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO Test Client</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        input, button { padding: 8px; margin: 5px 0; }
+        .log { height: 200px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
+        .event { margin: 5px 0; padding: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Socket.IO Test Client</h1>
+    
+    <div class="section">
+        <h2>Connection</h2>
+        <input type="text" id="tokenInput" placeholder="JWT Token" style="width: 300px;">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <div>Status: <span id="status">Disconnected</span></div>
+    </div>
+    
+    <div class="section">
+        <h2>Document Events</h2>
+        <input type="text" id="documentIdInput" placeholder="Document ID">
+        <button onclick="joinDocument()">Join Document</button>
+        <button onclick="leaveDocument()">Leave Document</button>
+        <button onclick="simulateCursorMove()">Simulate Cursor Move</button>
+    </div>
+    
+    <div class="section">
+        <h2>Event Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let currentDocumentId = null;
+        
+        function logEvent(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const eventElement = document.createElement('div');
+            eventElement.className = `event ${type}`;
+            eventElement.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logElement.appendChild(eventElement);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        function connect() {
+            const token = document.getElementById('tokenInput').value;
+            if (!token) {
+                alert('Please enter a JWT token');
+                return;
+            }
+            
+            // Disconnect if already connected
+            if (socket) {
+                socket.disconnect();
+            }
+            
+            // Connect to Socket.IO server
+            try {
+                socket = io('http://localhost:5000', {
+                    auth: {
+                        token: token
+                    },
+                    transports: ['websocket', 'polling'],
+                    timeout: 10000
+                });
+                
+                socket.on('connect', () => {
+                    document.getElementById('status').textContent = 'Connected';
+                    document.getElementById('status').className = 'success';
+                    logEvent('Connected to server', 'success');
+                });
+                
+                socket.on('disconnect', (reason) => {
+                    document.getElementById('status').textContent = 'Disconnected';
+                    document.getElementById('status').className = 'error';
+                    logEvent(`Disconnected: ${reason}`, 'warning');
+                });
+                
+                socket.on('connect_error', (error) => {
+                    logEvent(`Connection error: ${error.message}`, 'error');
+                    console.error('Connection error details:', error);
+                });
+                
+                socket.on('error', (error) => {
+                    logEvent(`Error: ${error.message}`, 'error');
+                });
+                
+                socket.on('user-joined', (data) => {
+                    logEvent(`User joined: ${JSON.stringify(data)}`, 'info');
+                });
+                
+                socket.on('user-left', (data) => {
+                    logEvent(`User left: ${JSON.stringify(data)}`, 'info');
+                });
+                
+                socket.on('cursor-move', (data) => {
+                    logEvent(`Cursor moved: ${JSON.stringify(data)}`, 'info');
+                });
+            } catch (error) {
+                logEvent(`Failed to connect: ${error.message}`, 'error');
+            }
+        }
+        
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'error';
+                logEvent('Manually disconnected', 'info');
+            }
+        }
+        
+        function joinDocument() {
+            if (!socket || !socket.connected) {
+                alert('Please connect first');
+                return;
+            }
+            
+            const documentId = document.getElementById('documentIdInput').value;
+            if (!documentId) {
+                alert('Please enter a document ID');
+                return;
+            }
+            
+            currentDocumentId = documentId;
+            socket.emit('join-document', { documentId: documentId });
+            logEvent(`Attempting to join document: ${documentId}`, 'info');
+        }
+        
+        function leaveDocument() {
+            if (!socket || !socket.connected || !currentDocumentId) {
+                alert('Not in a document');
+                return;
+            }
+            
+            socket.emit('leave-document', { documentId: currentDocumentId });
+            logEvent(`Left document: ${currentDocumentId}`, 'info');
+            currentDocumentId = null;
+        }
+        
+        function simulateCursorMove() {
+            if (!socket || !socket.connected || !currentDocumentId) {
+                alert('Please join a document first');
+                return;
+            }
+            
+            const position = {
+                line: Math.floor(Math.random() * 100),
+                ch: Math.floor(Math.random() * 50)
+            };
+            
+            socket.emit('cursor-move', {
+                documentId: currentDocumentId,
+                position: position
+            });
+            
+            logEvent(`Cursor moved to: ${JSON.stringify(position)}`, 'info');
+        }
+    </script>
+</body>
+</html>

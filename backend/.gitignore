@@ -10,5 +10,5 @@ yarn.lock
 .env
 
 # Notes
-notes.txt
-
+*.txt
+notes.md
